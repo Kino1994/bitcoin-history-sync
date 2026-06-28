@@ -120,11 +120,13 @@ fast-export`'s ordering of unrelated commits changed across versions, and
 filter-repo rewrites commit-hash references in commit messages in a single
 streaming pass — so a changed order makes some message references resolve in one
 git version and stay stale in another, changing commit bytes and cascading. The
-published master was built with **git 2.34.1 + filter-repo 2.47.0** (Ubuntu 22.04),
-so the job runs inside a pinned `ubuntu:22.04` container with
-`git-filter-repo==2.47.0`, reproducing the published history exactly (a
-fast-forward, never a force-push). Running locally on Ubuntu 22.04 needs no pin.
-The full byte-level root-cause analysis is in [`NOTES.md`](NOTES.md).
+current baseline (`1a39fbe8badb`) was rebuilt with **git 2.43.0 + filter-repo
+2.47.0** (Ubuntu 24.04), so the job runs inside a pinned `ubuntu:24.04` container
+with `git-filter-repo==2.47.0`, reproducing it exactly (a fast-forward, never a
+force-push). Running it locally requires the **same** toolchain — on a host with a
+different git (e.g. Ubuntu 22.04's 2.34.1) it diverges, so run the bake inside the
+same `ubuntu:24.04` container. The full byte-level root-cause analysis is in
+[`NOTES.md`](NOTES.md).
 
 ## Notes
 

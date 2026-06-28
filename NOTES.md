@@ -3,8 +3,9 @@
 This documents a non-obvious determinism hazard discovered while automating the
 sync: **the rewritten commit SHAs depend on the `git` version used**, even with an
 identical base, identical MAP, and the same `git-filter-repo` version. This is why
-the CI job is pinned to a `ubuntu:22.04` container (git 2.34.1 + filter-repo
-2.47.0) — the exact toolchain that produced the published `master`.
+the CI job runs in a **pinned container**. The investigation below was done with
+the original baseline (`084c3b09b714`, git 2.34.1); the repo was later re-baselined
+to git 2.43.0 — see [Re-baseline (2026-06-29)](#re-baseline-2026-06-29) at the end.
 
 ## Symptom
 
@@ -88,22 +89,32 @@ legitimate behaviors:
 The emergent effect is a real cross-version non-reproducibility hazard, born of
 documented/expected behavior rather than a fault.
 
-Notably, **git 2.54's result is the more correct one**: it points the message at a
-hash that actually exists. git 2.34 leaves **stale hash references** in the
-messages — meaning the *published* history already contains message hashes that no
-longer resolve inside the repo. Reproducing the baseline means reproducing that
-2.34 imperfection, which is exactly what the pinned container does.
+Notably, the newer git's result is marginally *more* correct here: it points this
+message at a hash that actually exists, whereas git 2.34 left it stale. But the
+magnitude is tiny and must not be overstated: across the whole history both bakes
+have **~41,210 dangling 40-hex references in commit messages**, differing by only
+**2**. Of those ~41k, **41,173 are not even commits in bitcoin/bitcoin** — they are
+ordinary citations (other PRs, `Revert <sha>`, abbreviated hashes, external SHAs)
+that every git history has, present upstream too. So this is **not a meaningful
+defect**: it is one stale citation among tens of thousands of normal ones, and a
+newer git "fixes" 2 of them while rewriting all 49,381 commit SHAs.
 
 ## Consequences for this repo
 
-- **CI pins the toolchain** (`container: ubuntu:22.04`, git 2.34.1,
-  `git-filter-repo==2.47.0`) so it reproduces `084c3b09` and the push stays a
+- **CI pins the toolchain** (`container: ubuntu:24.04`, git 2.43.0,
+  `git-filter-repo==2.47.0`) so it reproduces `1a39fbe8badb` and the push stays a
   fast-forward. See `.github/workflows/history-sync.yml`.
-- **Running locally on Ubuntu 22.04 needs no pin** — it already matches.
-- **Upgrading the toolchain** (e.g. to a modern git that fixes the stale
-  references) is a deliberate, one-time **history rewrite**: re-bake locally inside
-  the new pinned container, verify, `git push --force-with-lease`, then bump the
-  pin in the workflow to match. Never bump the pin before re-baselining.
+- **Running locally now requires the same toolchain.** A host with a different git
+  (e.g. Ubuntu 22.04's 2.34.1) diverges, so run the bake inside the same
+  `ubuntu:24.04` container.
+- **Pinning is mandatory regardless of which version you choose.** `git
+  fast-export` ordering can change in *any* future version, so a newer pin is not
+  "more future-proof" — only the pin itself guarantees reproducibility, and it must
+  cover both git and filter-repo.
+- **Upgrading the toolchain again** is a deliberate, one-time **history rewrite**:
+  re-bake inside the new pinned container, verify the tip is stable (two bakes →
+  same SHA), `git push --force-with-lease`, then bump the pin in the workflow to
+  match. Never bump the pin before re-baselining.
 
 ## How to reproduce
 
@@ -126,3 +137,24 @@ docker run --rm -v ~/git:/g alpine:latest sh -c '
   git filter-repo --quiet --force --replace-refs delete-no-add
   git rev-parse master'         # -> 1a39fbe8badb
 ```
+
+## Re-baseline (2026-06-29)
+
+The repo was re-baselined from the original git-2.34.1 baseline (`084c3b09b714`) to
+a git-2.43.0 baseline (`1a39fbe8badb`). Rationale: maintainability — pinning a
+modern, frozen toolchain (`ubuntu:24.04`) rather than carrying `ubuntu:22.04`
+forever. It is **not** a fix (it changes 2 of ~41k dangling references) and it does
+**not** remove the need to pin.
+
+Steps performed (low risk — nobody had cloned the fork):
+
+1. Baked twice inside `ubuntu:24.04` (git 2.43.0 + filter-repo 2.47.0); both runs
+   produced `1a39fbe8badb` → deterministic. (git 2.43 happens to match git 2.54.)
+2. Verified vs the old baseline: same commit count (49,381), **identical tip tree**
+   (`bb09b9f…` → same content, only SHAs differ), `svn` base still an ancestor.
+3. `git push --force-with-lease=master:084c3b09… origin master:master` →
+   `084c3b09b7 → 1a39fbe8ba`.
+4. Bumped the workflow pin to `ubuntu:24.04` and updated the docs.
+
+Old SHAs (incl. `084c3b09b714`) are now obsolete; the live baseline is
+`1a39fbe8badb`.

@@ -9,14 +9,15 @@
 #     heavy upstream ci.yml never runs.
 #
 # WHY A PINNED CONTAINER
-#   git-filter-repo rewrites history by dumping every commit through
-#   `git fast-export` and rebuilding it with `git fast-import`. The serialization
-#   of optional commit headers (GPG signatures, mergetags — abundant in Bitcoin's
-#   signed merges) varies between toolchain versions, so the rewritten commit
-#   bytes — and thus the SHAs — depend on the git + filter-repo versions. The
-#   published master was built with Ubuntu 22.04's git 2.34.1 + filter-repo
-#   2.47.0; pinning the job to the same toolchain reproduces it exactly, so the
-#   push is a fast-forward (no history rewrite, no force-push).
+#   The rewritten SHAs depend on the git version. `git fast-export`'s ordering of
+#   unrelated commits changed across versions, and git-filter-repo rewrites
+#   commit-hash references inside commit messages in a single streaming pass, so a
+#   changed order leaves some message references resolved in one git version and
+#   stale in another -> different commit bytes -> different SHAs that cascade. The
+#   baseline (`1a39fbe8badb`) was rebuilt with Ubuntu 24.04's git 2.43.0 +
+#   filter-repo 2.47.0; pinning the job to the same toolchain reproduces it exactly
+#   so the push is a fast-forward (no history rewrite, no force-push). Full
+#   analysis: NOTES.md.
 #
 # AUTH — the built-in GITHUB_TOKEN can only write to THIS repo, so pushing to the
 # target needs a Personal Access Token with write access to it. Create a
@@ -49,16 +50,16 @@ jobs:
   level:
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:22.04   # pins git to 2.34.1 (matches the published baseline)
+      image: ubuntu:24.04   # pins git to 2.43.0 (matches the rebuilt baseline)
     steps:
-      - name: Install pinned toolchain (git 2.34.1 + filter-repo 2.47.0)
+      - name: Install pinned toolchain (git 2.43.0 + filter-repo 2.47.0)
         run: |
           set -eu
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get install -y --no-install-recommends \
             git ca-certificates python3 python3-pip util-linux
-          pip3 install --no-cache-dir git-filter-repo==2.47.0
+          pip3 install --no-cache-dir --break-system-packages git-filter-repo==2.47.0
           git --version
           python3 -c "import importlib.metadata as m; print('filter-repo', m.version('git-filter-repo'))"
 
