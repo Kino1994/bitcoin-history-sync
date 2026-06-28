@@ -1,0 +1,94 @@
+# Weekly leveling of the fork's `master`, driven from THIS repo.
+#
+# This workflow lives in bitcoin-history-sync (the scripts repo) and pushes the
+# leveled `master` to the TARGET repo (bitcoin-svn-git-history). Running it from
+# here means:
+#   - the schedule fires from this repo's default branch (just scripts, never
+#     rebuilt), so there is no conflict with the deterministic master rebake;
+#   - the TARGET repo can keep Actions DISABLED — it only receives a push, so its
+#     heavy upstream ci.yml never runs.
+#
+# WHY A PINNED CONTAINER
+#   git-filter-repo rewrites history by dumping every commit through
+#   `git fast-export` and rebuilding it with `git fast-import`. The serialization
+#   of optional commit headers (GPG signatures, mergetags — abundant in Bitcoin's
+#   signed merges) varies between toolchain versions, so the rewritten commit
+#   bytes — and thus the SHAs — depend on the git + filter-repo versions. The
+#   published master was built with Ubuntu 22.04's git 2.34.1 + filter-repo
+#   2.47.0; pinning the job to the same toolchain reproduces it exactly, so the
+#   push is a fast-forward (no history rewrite, no force-push).
+#
+# AUTH — the built-in GITHUB_TOKEN can only write to THIS repo, so pushing to the
+# target needs a Personal Access Token with write access to it. Create a
+# fine-grained PAT scoped to bitcoin-svn-git-history with "Contents: Read and
+# write", and add it here as the secret SYNC_TOKEN
+# (Settings -> Secrets and variables -> Actions). The token is only needed for
+# the actual push; a "no changes" run goes green without it.
+#
+# NOTE: a PAT push DOES trigger the target's workflows (unlike GITHUB_TOKEN), so
+# keep Actions disabled in the target — or accept that its ci.yml will run.
+
+name: history-sync
+
+on:
+  schedule:
+    - cron: '0 22 * * 0'   # weekly, Sundays 22:00 UTC (≈ every 7 days)
+  workflow_dispatch: {}     # manual runs from the Actions tab
+
+permissions:
+  contents: read            # we don't write to this repo; push goes to TARGET
+
+concurrency:
+  group: history-sync
+  cancel-in-progress: false
+
+env:
+  TARGET_REPO: Kino1994/bitcoin-svn-git-history
+
+jobs:
+  level:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:22.04   # pins git to 2.34.1 (matches the published baseline)
+    steps:
+      - name: Install pinned toolchain (git 2.34.1 + filter-repo 2.47.0)
+        run: |
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates python3 python3-pip util-linux
+          pip3 install --no-cache-dir git-filter-repo==2.47.0
+          git --version
+          python3 -c "import importlib.metadata as m; print('filter-repo', m.version('git-filter-repo'))"
+
+      - name: Checkout scripts (this repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout base (PUB) — svn branch of the target repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}   # public repo: read needs no PAT
+          ref: svn
+          fetch-depth: 0
+          path: pub
+
+      - name: Cache upstream mirror (~2.5 GB)
+        uses: actions/cache@v4
+        with:
+          path: mirror
+          key: bitcoin-mirror-${{ github.run_id }}
+          restore-keys: bitcoin-mirror-
+
+      - name: Level & publish master to the target
+        env:
+          PUB:      ${{ github.workspace }}/pub
+          MIRROR:   ${{ github.workspace }}/mirror
+          MAP:      ${{ runner.temp }}/splice-map.txt
+          LOCK:     ${{ runner.temp }}/history-sync.lock
+          LOG:      "-"                         # log to the job console
+          UPSTREAM: https://github.com/bitcoin/bitcoin
+          BASE_REF: svn
+          BRANCH:   master
+          ORIGIN:   https://x-access-token:${{ secrets.SYNC_TOKEN }}@github.com/${{ env.TARGET_REPO }}.git
+        run: bash bitcoin-history-sync.sh

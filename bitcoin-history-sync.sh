@@ -19,23 +19,30 @@
 # Variables (all optional; defaults in brackets):
 #
 #   MIRROR     Pristine mirror of the upstream (git clone --mirror).
-#              [$HOME/git/bitcoin-mirror]
+#              Auto-created from UPSTREAM if missing. [$HOME/git/bitcoin-mirror]
+#   UPSTREAM   URL to mirror-clone when MIRROR is missing.
+#              [https://github.com/bitcoin/bitcoin]
 #   PUB        Local repo holding the real-id base on branch BASE_REF.
+#              The only thing that must already exist.
 #              [$HOME/git/bitcoin-svn-git-history]
 #   MAP        File mapping "RAW_SHA REALID_SHA" (one pair per line): each raw
 #              commit of the upstream's old era -> its real-id equivalent in
-#              BASE_REF. [$HOME/git/.bitcoin-splice-map.txt]
+#              BASE_REF. Auto-generated via gen-splice-map.sh if missing.
+#              [$HOME/git/.bitcoin-splice-map.txt]
 #   BASE_REF   Branch in PUB with the real-id base up to the link point. [svn]
 #   BRANCH     Branch to level and publish. [master]
 #   ORIGIN     Push URL of the fork. [git -C "$PUB" remote get-url origin]
-#   LOG        Log file. [$HOME/git/bitcoin-history-sync.log]
+#   LOG        Log file, or '-' / /dev/stdout to log to the console (CI).
+#              [$HOME/git/bitcoin-history-sync.log]
 #   LOCK       Lock file. [$HOME/.cache/bitcoin-history-sync.lock]
 # ---------------------------------------------------------------------------
 set -euo pipefail
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
 export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}"
 
 MIRROR="${MIRROR:-$HOME/git/bitcoin-mirror}"
+UPSTREAM="${UPSTREAM:-https://github.com/bitcoin/bitcoin}"
 PUB="${PUB:-$HOME/git/bitcoin-svn-git-history}"
 MAP="${MAP:-$HOME/git/.bitcoin-splice-map.txt}"
 BASE_REF="${BASE_REF:-svn}"
@@ -44,19 +51,35 @@ ORIGIN="${ORIGIN:-$(git -C "$PUB" remote get-url origin 2>/dev/null || true)}"
 LOG="${LOG:-$HOME/git/bitcoin-history-sync.log}"
 LOCK="${LOCK:-$HOME/.cache/bitcoin-history-sync.lock}"
 
-mkdir -p "$(dirname "$LOG")" "$(dirname "$LOCK")"
-exec >>"$LOG" 2>&1
+# Log to a file by default; set LOG to '-' (or /dev/stdout) to log to the
+# console instead — handy for CI, where output belongs in the job log.
+mkdir -p "$(dirname "$LOCK")"
+case "$LOG" in
+  ""|-|/dev/stdout|/dev/stderr) : ;;
+  *) mkdir -p "$(dirname "$LOG")"; exec >>"$LOG" 2>&1 ;;
+esac
 echo "===== $(date -Is) ====="
 
 exec 9>"$LOCK"
 flock -n 9 || { echo "another run in progress; exiting"; exit 0; }
 
-for p in "$MIRROR" "$PUB" "$MAP"; do
-  [ -e "$p" ] || { echo "ERROR: missing '$p'"; exit 1; }
-done
+# PUB is the only prerequisite that must already exist.
+[ -e "$PUB" ] || { echo "ERROR: missing PUB '$PUB'"; exit 1; }
 [ -n "$ORIGIN" ] || { echo "ERROR: empty ORIGIN (set ORIGIN or add an 'origin' remote in $PUB)"; exit 1; }
 command -v git-filter-repo >/dev/null 2>&1 || git filter-repo --version >/dev/null 2>&1 || {
   echo "ERROR: git-filter-repo is not installed (pip install --user git-filter-repo)"; exit 1; }
+
+# 0) bootstrap MIRROR and MAP if they don't exist yet (idempotent)
+if [ ! -e "$MIRROR" ]; then
+  echo "MIRROR missing -> git clone --mirror $UPSTREAM"
+  mkdir -p "$(dirname "$MIRROR")"
+  git clone --mirror "$UPSTREAM" "$MIRROR"
+fi
+if [ ! -e "$MAP" ]; then
+  echo "MAP missing -> generating via gen-splice-map.sh"
+  MIRROR="$MIRROR" UPSTREAM="$UPSTREAM" PUB="$PUB" BASE_REF="$BASE_REF" MAP="$MAP" \
+    "$SELF_DIR/gen-splice-map.sh"
+fi
 
 # 1) update the upstream mirror (deltas only)
 git -C "$MIRROR" fetch -q --prune origin
