@@ -89,15 +89,18 @@ legitimate behaviors:
 The emergent effect is a real cross-version non-reproducibility hazard, born of
 documented/expected behavior rather than a fault.
 
-Notably, the newer git's result is marginally *more* correct here: it points this
-message at a hash that actually exists, whereas git 2.34 left it stale. But the
-magnitude is tiny and must not be overstated: across the whole history both bakes
-have **~41,210 dangling 40-hex references in commit messages**, differing by only
-**2**. Of those ~41k, **41,173 are not even commits in bitcoin/bitcoin** — they are
-ordinary citations (other PRs, `Revert <sha>`, abbreviated hashes, external SHAs)
-that every git history has, present upstream too. So this is **not a meaningful
-defect**: it is one stale citation among tens of thousands of normal ones, and a
-newer git "fixes" 2 of them while rewriting all 49,381 commit SHAs.
+Notably, the newer git's result is *more* correct here: it points these messages at
+hashes that actually exist, whereas git 2.34 left them stale. Across the full
+history the newer toolchain updates the embedded hash references (mostly
+**abbreviated** 7–12 char hashes, plus a couple of full ones) in **54 commit
+messages** — pointing them at the rewritten SHAs instead of the pre-rewrite ones.
+
+Keep the magnitude in perspective, though: counting only **full 40-hex** tokens,
+both bakes carry **~41,210 dangling references** in messages and differ by just 2;
+of those ~41k, **41,173 are not even commits in bitcoin/bitcoin** — ordinary
+citations (other PRs, `Revert <sha>`, external SHAs) that every git history has,
+present upstream too. So the "fix" is real but cosmetic: 54 message references
+resolve where they did not before, out of 49,381 commits whose SHAs all change.
 
 ## Consequences for this repo
 
@@ -150,8 +153,10 @@ Steps performed (low risk — nobody had cloned the fork):
 
 1. Baked twice inside `ubuntu:24.04` (git 2.43.0 + filter-repo 2.47.0); both runs
    produced `1a39fbe8badb` → deterministic. (git 2.43 happens to match git 2.54.)
-2. Verified vs the old baseline: same commit count (49,381), **identical tip tree**
-   (`bb09b9f…` → same content, only SHAs differ), `svn` base still an ancestor.
+2. Verified vs the old baseline: same commit count (49,381), the **full multiset of
+   all 47,638 trees is identical** (content byte-for-byte unchanged), authors /
+   committers / dates identical, `svn` base still an ancestor. The only differences
+   are **54 commit messages** with updated hash references (see above).
 3. `git push --force-with-lease=master:084c3b09… origin master:master` →
    `084c3b09b7 → 1a39fbe8ba`.
 4. Bumped the workflow pin to `ubuntu:24.04` and updated the docs.
