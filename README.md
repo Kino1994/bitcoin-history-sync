@@ -114,14 +114,17 @@ Setup:
 - A PAT push *does* trigger the target's workflows (unlike `GITHUB_TOKEN`), so keep
   Actions disabled in the target — or accept that its `ci.yml` will run.
 
-**Determinism / pinned toolchain.** `git-filter-repo` rewrites history via
-`git fast-export | git fast-import`, and the byte layout of optional commit headers
-(GPG signatures, mergetags — common in Bitcoin's signed merges) varies between
-toolchain versions, so the resulting SHAs depend on the git + filter-repo versions.
-The published master was built with **git 2.34.1 + filter-repo 2.47.0** (Ubuntu
-22.04). The job therefore runs inside a `ubuntu:22.04` container with
-`git-filter-repo==2.47.0` pinned, reproducing the published history exactly (a
+**Determinism / pinned toolchain.** The rewritten SHAs depend on the **git
+version**, even with an identical base, MAP and filter-repo version: `git
+fast-export`'s ordering of unrelated commits changed across versions, and
+filter-repo rewrites commit-hash references in commit messages in a single
+streaming pass — so a changed order makes some message references resolve in one
+git version and stay stale in another, changing commit bytes and cascading. The
+published master was built with **git 2.34.1 + filter-repo 2.47.0** (Ubuntu 22.04),
+so the job runs inside a pinned `ubuntu:22.04` container with
+`git-filter-repo==2.47.0`, reproducing the published history exactly (a
 fast-forward, never a force-push). Running locally on Ubuntu 22.04 needs no pin.
+The full byte-level root-cause analysis is in [`NOTES.md`](NOTES.md).
 
 ## Notes
 
