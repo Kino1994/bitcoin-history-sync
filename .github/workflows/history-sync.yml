@@ -1,7 +1,7 @@
 # Weekly leveling of the fork's `master`, driven from THIS repo.
 #
-# This workflow lives in bitcoin-history-sync (the scripts repo) and pushes the
-# leveled `master` to the TARGET repo (bitcoin-svn-git-history). Running it from
+# This workflow lives in bitcoin-full-history-sync (the scripts repo) and pushes the
+# leveled `master` to the TARGET repo (bitcoin-full-history). Running it from
 # here means:
 #   - the schedule fires from this repo's default branch (just scripts, never
 #     rebuilt), so there is no conflict with the deterministic master rebake;
@@ -21,7 +21,7 @@
 #
 # AUTH — the built-in GITHUB_TOKEN can only write to THIS repo, so pushing to the
 # target needs a Personal Access Token with write access to it. Create a
-# fine-grained PAT scoped to bitcoin-svn-git-history with "Contents: Read and
+# fine-grained PAT scoped to bitcoin-full-history with "Contents: Read and
 # write", and add it here as the secret SYNC_TOKEN
 # (Settings -> Secrets and variables -> Actions). The token is only needed for
 # the actual push; a "no changes" run goes green without it.
@@ -44,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TARGET_REPO: Kino1994/bitcoin-svn-git-history
+  TARGET_REPO: Kino1994/bitcoin-full-history
 
 jobs:
   level:
@@ -92,4 +92,4 @@ jobs:
           BASE_REF: svn
           BRANCH:   master
           ORIGIN:   https://x-access-token:${{ secrets.SYNC_TOKEN }}@github.com/${{ env.TARGET_REPO }}.git
-        run: bash bitcoin-history-sync.sh
+        run: bash bitcoin-full-history-sync.sh

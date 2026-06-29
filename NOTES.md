@@ -124,7 +124,7 @@ resolve where they did not before, out of 49,381 commits whose SHAs all change.
 ```sh
 # A: published toolchain (Ubuntu 22.04)
 git clone -q ~/git/bitcoin-mirror /tmp/bakeA && cd /tmp/bakeA
-git fetch -q ~/git/bitcoin-svn-git-history refs/heads/svn:refs/heads/_base
+git fetch -q ~/git/bitcoin-full-history refs/heads/svn:refs/heads/_base
 while read -r raw real _; do git replace -f "$raw" "$real" 2>/dev/null; done < ~/git/.bitcoin-splice-map.txt
 git filter-repo --quiet --force --replace-refs delete-no-add
 git rev-parse master            # -> 084c3b09b714
@@ -135,7 +135,7 @@ docker run --rm -v ~/git:/g alpine:latest sh -c '
   pip install -q --break-system-packages git-filter-repo==2.47.0
   git config --global safe.directory "*"
   git clone -q /g/bitcoin-mirror /tmp/bakeB && cd /tmp/bakeB
-  git fetch -q /g/bitcoin-svn-git-history refs/heads/svn:refs/heads/_base
+  git fetch -q /g/bitcoin-full-history refs/heads/svn:refs/heads/_base
   while read -r raw real _; do git replace -f "$raw" "$real" 2>/dev/null; done < /g/.bitcoin-splice-map.txt
   git filter-repo --quiet --force --replace-refs delete-no-add
   git rev-parse master'         # -> 1a39fbe8badb

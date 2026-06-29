@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # gen-splice-map — builds the MAP "RAW_SHA REALID_SHA" used by
-# bitcoin-history-sync.sh, mapping each old-era commit of the upstream to its
+# bitcoin-full-history-sync.sh, mapping each old-era commit of the upstream to its
 # real-id equivalent in the base branch (BASE_REF) of PUB.
 #
 # Matching key: "author-ts | committer-ts | tree" (%at|%ct|%T), NOT the tree
@@ -21,7 +21,7 @@
 # Variables (all optional; defaults in brackets):
 #
 #   PUB        Local repo holding the real-id base on branch BASE_REF.
-#              [$HOME/git/bitcoin-svn-git-history]
+#              [$HOME/git/bitcoin-full-history]
 #   MIRROR     Pristine mirror of the upstream (git clone --mirror).
 #              [$HOME/git/bitcoin-mirror]
 #   UPSTREAM   URL to mirror-clone when MIRROR is missing.
@@ -32,7 +32,7 @@
 set -euo pipefail
 export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
-PUB="${PUB:-$HOME/git/bitcoin-svn-git-history}"
+PUB="${PUB:-$HOME/git/bitcoin-full-history}"
 MIRROR="${MIRROR:-$HOME/git/bitcoin-mirror}"
 UPSTREAM="${UPSTREAM:-https://github.com/bitcoin/bitcoin}"
 BASE_REF="${BASE_REF:-svn}"

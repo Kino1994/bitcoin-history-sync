@@ -1,4 +1,4 @@
-# bitcoin-history-sync
+# bitcoin-full-history-sync
 
 Keeps a fork with a **rewritten-base history** up to date with its **upstream**,
 putting new commits **on top** without breaking the base.
@@ -66,7 +66,7 @@ otherwise they keep their original SHAs and break determinism. Run it standalone
 ## Usage
 
 ```sh
-./bitcoin-history-sync.sh
+./bitcoin-full-history-sync.sh
 ```
 
 Everything is configurable via environment (defaults under `$HOME`, no absolute
@@ -76,7 +76,7 @@ paths — user-agnostic):
 |------------|------------------------------------------|------------------------------------------|
 | `MIRROR`   | `$HOME/git/bitcoin-mirror`               | `--mirror` clone of the upstream (auto)  |
 | `UPSTREAM` | `https://github.com/bitcoin/bitcoin`     | URL to mirror-clone if `MIRROR` is absent|
-| `PUB`      | `$HOME/git/bitcoin-svn-git-history`      | repo with the real-id base (`BASE_REF`)  |
+| `PUB`      | `$HOME/git/bitcoin-full-history`      | repo with the real-id base (`BASE_REF`)  |
 | `MAP`      | `$HOME/git/.bitcoin-splice-map.txt`      | `RAW_SHA REALID_SHA` mapping             |
 | `BASE_REF` | `svn`                                    | base branch in `PUB` (up to the link)    |
 | `BRANCH`   | `master`                                 | branch to level/publish                  |
@@ -85,7 +85,7 @@ paths — user-agnostic):
 ### cron
 
 ```cron
-0 */6 * * * /path/to/bitcoin-history-sync.sh
+0 */6 * * * /path/to/bitcoin-full-history-sync.sh
 ```
 
 > The push in cron needs an SSH key **without a passphrase** (the script uses
@@ -95,7 +95,7 @@ paths — user-agnostic):
 
 The workflow at [`.github/workflows/history-sync.yml`](.github/workflows/history-sync.yml)
 runs **from this repo** and pushes the leveled `master` to the target fork
-(`bitcoin-svn-git-history`). Running it from the scripts repo, rather than from the
+(`bitcoin-full-history`). Running it from the scripts repo, rather than from the
 fork, keeps things clean:
 
 - The schedule fires from this repo's default branch (just scripts, never rebuilt),
@@ -105,7 +105,7 @@ fork, keeps things clean:
 
 Setup:
 
-- Create a fine-grained **PAT** scoped to `bitcoin-svn-git-history` with
+- Create a fine-grained **PAT** scoped to `bitcoin-full-history` with
   *Contents: Read and write*, and add it here as the secret `SYNC_TOKEN`. The
   built-in `GITHUB_TOKEN` can only write to *this* repo, so a cross-repo push needs
   the PAT.

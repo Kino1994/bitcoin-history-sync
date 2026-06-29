@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# bitcoin-history-sync — "leveling" of a fork with a rewritten-base history.
+# bitcoin-full-history-sync — "leveling" of a fork with a rewritten-base history.
 #
 # Puts the NEW commits of an upstream (e.g. bitcoin/bitcoin) ON TOP of a
 # reconstructed history whose old era has different SHAs (rewritten identities:
@@ -24,7 +24,7 @@
 #              [https://github.com/bitcoin/bitcoin]
 #   PUB        Local repo holding the real-id base on branch BASE_REF.
 #              The only thing that must already exist.
-#              [$HOME/git/bitcoin-svn-git-history]
+#              [$HOME/git/bitcoin-full-history]
 #   MAP        File mapping "RAW_SHA REALID_SHA" (one pair per line): each raw
 #              commit of the upstream's old era -> its real-id equivalent in
 #              BASE_REF. Auto-generated via gen-splice-map.sh if missing.
@@ -33,8 +33,8 @@
 #   BRANCH     Branch to level and publish. [master]
 #   ORIGIN     Push URL of the fork. [git -C "$PUB" remote get-url origin]
 #   LOG        Log file, or '-' / /dev/stdout to log to the console (CI).
-#              [$HOME/git/bitcoin-history-sync.log]
-#   LOCK       Lock file. [$HOME/.cache/bitcoin-history-sync.lock]
+#              [$HOME/git/bitcoin-full-history-sync.log]
+#   LOCK       Lock file. [$HOME/.cache/bitcoin-full-history-sync.lock]
 # ---------------------------------------------------------------------------
 set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,13 +43,13 @@ export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}"
 
 MIRROR="${MIRROR:-$HOME/git/bitcoin-mirror}"
 UPSTREAM="${UPSTREAM:-https://github.com/bitcoin/bitcoin}"
-PUB="${PUB:-$HOME/git/bitcoin-svn-git-history}"
+PUB="${PUB:-$HOME/git/bitcoin-full-history}"
 MAP="${MAP:-$HOME/git/.bitcoin-splice-map.txt}"
 BASE_REF="${BASE_REF:-svn}"
 BRANCH="${BRANCH:-master}"
 ORIGIN="${ORIGIN:-$(git -C "$PUB" remote get-url origin 2>/dev/null || true)}"
-LOG="${LOG:-$HOME/git/bitcoin-history-sync.log}"
-LOCK="${LOCK:-$HOME/.cache/bitcoin-history-sync.lock}"
+LOG="${LOG:-$HOME/git/bitcoin-full-history-sync.log}"
+LOCK="${LOCK:-$HOME/.cache/bitcoin-full-history-sync.lock}"
 
 # Log to a file by default; set LOG to '-' (or /dev/stdout) to log to the
 # console instead — handy for CI, where output belongs in the job log.
