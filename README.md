@@ -93,7 +93,7 @@ paths — user-agnostic):
 
 ### GitHub Actions (weekly)
 
-The workflow at [`.github/workflows/history-sync.yml`](.github/workflows/history-sync.yml)
+The workflow at [`.github/workflows/full-history-sync.yml`](.github/workflows/full-history-sync.yml)
 runs **from this repo** and pushes the leveled `master` to the target fork
 (`bitcoin-full-history`). Running it from the scripts repo, rather than from the
 fork, keeps things clean:

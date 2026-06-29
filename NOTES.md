@@ -106,7 +106,7 @@ resolve where they did not before, out of 49,381 commits whose SHAs all change.
 
 - **CI pins the toolchain** (`container: ubuntu:24.04`, git 2.43.0,
   `git-filter-repo==2.47.0`) so it reproduces `1a39fbe8badb` and the push stays a
-  fast-forward. See `.github/workflows/history-sync.yml`.
+  fast-forward. See `.github/workflows/full-history-sync.yml`.
 - **Running locally now requires the same toolchain.** A host with a different git
   (e.g. Ubuntu 22.04's 2.34.1) diverges, so run the bake inside the same
   `ubuntu:24.04` container.

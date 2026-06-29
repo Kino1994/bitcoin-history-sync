@@ -29,7 +29,7 @@
 # NOTE: a PAT push DOES trigger the target's workflows (unlike GITHUB_TOKEN), so
 # keep Actions disabled in the target — or accept that its ci.yml will run.
 
-name: history-sync
+name: full-history-sync
 
 on:
   schedule:
@@ -40,7 +40,7 @@ permissions:
   contents: read            # we don't write to this repo; push goes to TARGET
 
 concurrency:
-  group: history-sync
+  group: full-history-sync
   cancel-in-progress: false
 
 env:
@@ -86,7 +86,7 @@ jobs:
           PUB:      ${{ github.workspace }}/pub
           MIRROR:   ${{ github.workspace }}/mirror
           MAP:      ${{ runner.temp }}/splice-map.txt
-          LOCK:     ${{ runner.temp }}/history-sync.lock
+          LOCK:     ${{ runner.temp }}/full-history-sync.lock
           LOG:      "-"                         # log to the job console
           UPSTREAM: https://github.com/bitcoin/bitcoin
           BASE_REF: svn
