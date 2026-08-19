@@ -10,6 +10,8 @@
 # only rewrites parent pointers -> 0 conflicts; it preserves author, committer
 # and the EXACT merge topology of upstream. It is deterministic: already-published
 # SHAs do not change, so the push is a fast-forward (only new commits are added).
+# Determinism relies on --preserve-commit-hashes (see step 4) and is enforced by
+# an ancestry preflight before the push (step 5a).
 #
 # User/home-agnostic: no absolute paths; everything resolves via $HOME and via
 # environment variables with sane defaults. The fork URL is derived from the
@@ -100,7 +102,17 @@ while read -r raw realid _; do
 done < "$MAP"
 
 # 4) bake (rewrite parent pointers; no content merge)
-git filter-repo --quiet --force --replace-refs delete-no-add
+#
+# --preserve-commit-hashes is what keeps the bake reproducible. Without it,
+# filter-repo rewrites commit-hash references found in commit MESSAGES in a
+# single streaming pass, so whether a given reference resolves depends on the
+# order in which `git fast-export` emits commits with no ancestry relation --
+# an order that is unspecified and shifts BOTH across git versions AND as the
+# exported repo gains commits/refs. A single flipped reference changes the bytes
+# of an already-published commit and cascades into every descendant, turning the
+# push into a non-fast-forward. Preserving messages verbatim makes the bake a
+# pure function of (DAG + MAP). See NOTES.md.
+git filter-repo --quiet --force --replace-refs delete-no-add --preserve-commit-hashes
 
 NEWTIP="$(git rev-parse "$BRANCH")"
 echo "leveled tip = ${NEWTIP:0:12}  (published: ${PUBTIP:0:12})"
@@ -110,5 +122,19 @@ if [ "$NEWTIP" = "$PUBTIP" ]; then
   echo "no changes: already published"
   exit 0
 fi
+
+# 5a) preflight: the push MUST be a fast-forward. If the published tip is absent
+# from the bake, or is not an ancestor of it, the leveling did not reproduce the
+# published history -> stop with a clear diagnosis instead of an opaque
+# non-fast-forward rejection, and never force-push behind the operator's back:
+# recovering from that is a deliberate re-baseline (see NOTES.md).
+if [ -n "$PUBTIP" ] && { ! git cat-file -e "${PUBTIP}^{commit}" 2>/dev/null \
+                      || ! git merge-base --is-ancestor "$PUBTIP" "$NEWTIP"; }; then
+  echo "ERROR: diverged bake -- published ${PUBTIP:0:12} is not an ancestor of ${NEWTIP:0:12}"
+  echo "       refusing to push (it would not be a fast-forward)."
+  echo "       The leveling stopped being reproducible; see NOTES.md before re-baselining."
+  exit 1
+fi
+
 git push -q "$ORIGIN" "$BRANCH:$BRANCH"
 echo "OK: $BRANCH published -> ${NEWTIP:0:12}"

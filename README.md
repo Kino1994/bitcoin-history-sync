@@ -114,18 +114,22 @@ Setup:
 - A PAT push *does* trigger the target's workflows (unlike `GITHUB_TOKEN`), so keep
   Actions disabled in the target — or accept that its `ci.yml` will run.
 
-**Determinism / pinned toolchain.** The rewritten SHAs depend on the **git
-version**, even with an identical base, MAP and filter-repo version: `git
-fast-export`'s ordering of unrelated commits changed across versions, and
-filter-repo rewrites commit-hash references in commit messages in a single
-streaming pass — so a changed order makes some message references resolve in one
-git version and stay stale in another, changing commit bytes and cascading. The
-current baseline (`1a39fbe8badb`) was rebuilt with **git 2.43.0 + filter-repo
-2.47.0** (Ubuntu 24.04), so the job runs inside a pinned `ubuntu:24.04` container
-with `git-filter-repo==2.47.0`, reproducing it exactly (a fast-forward, never a
-force-push). Running it locally requires the **same** toolchain — on a host with a
-different git (e.g. Ubuntu 22.04's 2.34.1) it diverges, so run the bake inside the
-same `ubuntu:24.04` container. The full byte-level root-cause analysis is in
+**Determinism.** The bake is reproducible because filter-repo runs with
+`--preserve-commit-hashes`: commit **messages** are kept byte-identical to
+upstream, so the result is a pure function of *(DAG + MAP)*. Without that flag,
+filter-repo rewrites hash references inside messages in a single streaming pass,
+and whether a reference resolves depends on the order `git fast-export` emits
+unrelated commits — an order that is unspecified and shifts both **across git
+versions** and **as the repository grows**. One flipped reference changes a
+published commit's bytes and cascades, turning the next push into a
+non-fast-forward (this broke the weekly sync on 2026-08-16). As a safety net the
+script also refuses to push unless the published tip is an **ancestor** of the
+bake, so a divergence fails loudly instead of silently becoming a force-push.
+
+The job still runs inside a pinned `ubuntu:24.04` container with
+`git-filter-repo==2.47.0` — no longer as the guarantee of reproducibility, but as
+cheap insurance against filter-repo's other version-dependent behaviour. Current
+baseline: **`843d5adf9de8`**. The full byte-level analysis is in
 [`NOTES.md`](NOTES.md).
 
 ## Notes

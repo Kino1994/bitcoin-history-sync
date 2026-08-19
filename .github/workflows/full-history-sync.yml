@@ -9,15 +9,15 @@
 #     heavy upstream ci.yml never runs.
 #
 # WHY A PINNED CONTAINER
-#   The rewritten SHAs depend on the git version. `git fast-export`'s ordering of
-#   unrelated commits changed across versions, and git-filter-repo rewrites
-#   commit-hash references inside commit messages in a single streaming pass, so a
-#   changed order leaves some message references resolved in one git version and
-#   stale in another -> different commit bytes -> different SHAs that cascade. The
-#   baseline (`1a39fbe8badb`) was rebuilt with Ubuntu 24.04's git 2.43.0 +
-#   filter-repo 2.47.0; pinning the job to the same toolchain reproduces it exactly
-#   so the push is a fast-forward (no history rewrite, no force-push). Full
-#   analysis: NOTES.md.
+#   Reproducibility itself comes from `--preserve-commit-hashes` in the script:
+#   filter-repo otherwise rewrites hash references inside commit messages in a
+#   single streaming pass, so the result depends on `git fast-export`'s ordering of
+#   unrelated commits -- an order that shifts both across git versions AND as the
+#   repo grows, cascading into every descendant SHA and breaking the fast-forward
+#   (that is what failed on 2026-08-16). With messages preserved the bake is a pure
+#   function of (DAG + MAP). The pin stays as cheap insurance against filter-repo's
+#   other version-dependent behaviour, and reproduces the published baseline
+#   (`843d5adf9de8`) exactly. Full analysis: NOTES.md.
 #
 # AUTH — the built-in GITHUB_TOKEN can only write to THIS repo, so pushing to the
 # target needs a Personal Access Token with write access to it. Create a

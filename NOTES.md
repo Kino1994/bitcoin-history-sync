@@ -3,7 +3,13 @@
 This documents a non-obvious determinism hazard discovered while automating the
 sync: **the rewritten commit SHAs depend on the `git` version used**, even with an
 identical base, identical MAP, and the same `git-filter-repo` version. This is why
-the CI job runs in a **pinned container**. The investigation below was done with
+the CI job runs in a **pinned container**.
+
+> **Update (2026-08-19):** pinning the toolchain turned out to be **necessary but
+> not sufficient** — the same hazard also fires when the *input repository* grows,
+> with the toolchain frozen. It broke the weekly sync on 2026-08-16. The real fix
+> is `--preserve-commit-hashes`; see
+> [The ordering depends on the input too](#the-ordering-depends-on-the-input-too-2026-08-16). The investigation below was done with
 the original baseline (`084c3b09b714`, git 2.34.1); the repo was later re-baselined
 to git 2.43.0 — see [Re-baseline (2026-06-29)](#re-baseline-2026-06-29) at the end.
 
@@ -163,3 +169,111 @@ Steps performed (low risk — nobody had cloned the fork):
 
 Old SHAs (incl. `084c3b09b714`) are now obsolete; the live baseline is
 `1a39fbe8badb`.
+
+
+## The ordering depends on the input too (2026-08-16)
+
+The weekly run ([31975515430](https://github.com/Kino1994/bitcoin-full-history-sync/actions/runs/31975515430))
+failed on the push:
+
+```
+leveled tip = 6ceed97f3eb4  (published: 26b0c5d01508)
+ ! [rejected]              master -> master (fetch first)
+```
+
+Everything the pin was supposed to freeze *was* frozen. Ruled out one by one:
+
+| suspect | check | result |
+|---|---|---|
+| toolchain drift | job logs of the last green run vs. the failed one | identical: git `2.43.0-1ubuntu7.3`, filter-repo `2.47.0` |
+| unstable `MAP` | `gen-splice-map.sh` counters | identical: 195 keys / 291 pairs / 192 real-id |
+| upstream rewritten | `compare 128456b62d5...c90c23d388f` | `ahead 111, behind 0` — a clean fast-forward |
+| out-of-band push to the fork | repo events + `ls-remote` | only the 3 weekly pushes; `master` still at `26b0c5d01508` |
+
+**What actually happened.** The pin freezes only *one* of the two inputs that
+decide `git fast-export`'s ordering of unrelated commits. The other input is the
+**repository itself** — and filter-repo exports every ref of the clone
+(`git fast-export … --all`), not just `BRANCH`. Between the two runs the mirror
+gained 111 commits on `master` plus a merge on `31.x` (`017eb433a5e1`, 2026-08-10).
+That was enough to move a commit across the point where a hash reference in some
+*other* commit's message could still be resolved — and one flipped reference
+rewrites that commit's bytes, cascading through every descendant.
+
+So the leveling was never reproducible; it was only *accidentally stable* week to
+week, and the pin hid that.
+
+### Demonstrated (2026-08-19, same pinned container, mirror at `59224b66aa1`)
+
+Same toolchain, same MAP, five bakes — the only variables are the flag and the set
+of refs present in the clone:
+
+| bake | flags | refs exported | leveled `master` |
+|---|---|---|---|
+| C1 | *(none)* | all (`master`, `28.x`–`31.x`, tags) | `07e220f84444` |
+| C2 | *(none)* | `master` only | `4e06e6bc39a2` |
+| A1 | `--preserve-commit-hashes` | all | `843d5adf9de8` |
+| A2 | `--preserve-commit-hashes` | all (repeat) | `843d5adf9de8` |
+| A3 | `--preserve-commit-hashes` | `master` only | `843d5adf9de8` |
+
+C1 ≠ C2 is the bug in one line: **deleting unrelated refs changes the SHA of
+`master`.** A1 = A2 = A3 is the fix: the bake stops depending on the export order
+at all.
+
+A lockstep walk of C1 against the published history finds **exactly one divergence
+root**, and it is again a hash reference inside a message — this time an
+abbreviated one:
+
+```
+bake      :     ACK 0db1e2b1354a…, matches https://github.com/bitcoin/bitcoin/blob/4831b8a6c043
+published :     ACK 0db1e2b1354a…, matches https://github.com/bitcoin/bitcoin/blob/322661649328
+```
+
+3,537 commits differ downstream of it; **0** of them differ in tree, author or
+committer. Pure message churn, cascading into SHAs.
+
+## The fix — `--preserve-commit-hashes`
+
+`git filter-repo … --preserve-commit-hashes` turns off the rewriting of commit-hash
+references in commit **messages**. Messages then stay byte-identical to upstream,
+and the bake becomes a pure function of **(DAG + MAP)**: parent rewriting is
+deterministic, so nothing depends on the order in which `fast-export` walks
+unrelated commits — not across git versions, not as the repo grows, not as refs
+come and go.
+
+What it costs: the ~54 message references that the git-2.43 bake used to resolve
+now stay in their original upstream form (pointing at pre-rewrite SHAs). By the
+numbers in *"Is it a bug?"* above, that is cosmetic — those references were dangling
+in the upstream history too, and ~41k others always were.
+
+Belt and braces, `bitcoin-full-history-sync.sh` also **refuses to push** unless the
+published tip is an ancestor of the bake (step 5a). A divergence now stops the run
+with a clear diagnosis instead of an opaque non-fast-forward rejection, and never
+turns into a silent force-push.
+
+The container pin stays: it costs nothing and still guards filter-repo's other
+version-dependent behaviour (message re-encoding, tag handling).
+
+## Re-baseline (2026-08-19)
+
+The fix changes the bake, so `master` was re-baselined once more:
+`26b0c5d01508` → **`843d5adf9de8`**.
+
+Verified before pushing, comparing the new bake against the published history at
+the corresponding point (49,948 commits on both sides):
+
+| property | result |
+|---|---|
+| commit count | **49,948 = 49,948** |
+| multiset of all trees | **identical** — content byte-for-byte unchanged |
+| authors, committers, all timestamps | **identical** |
+| commit messages, verbatim | 15,641 differ |
+| commit messages, hex tokens normalised | **identical** — every difference is a hash reference, nothing else |
+| `svn` base (`12535d1a9704`) | still an ancestor |
+| determinism | 3 bakes (2 ref sets) → same tip `843d5adf9de8` |
+
+The previous tip is kept as `refs/heads/pre-preserve-hashes-baseline` in the fork,
+so the rewrite is reversible.
+
+Note: the fork's `28.x`–`31.x` branches were already stale before this (they match
+neither the pre- nor the post-fix bake — they predate the 2026-06-29 re-baseline).
+Only `master` is synced, so they were left untouched.
